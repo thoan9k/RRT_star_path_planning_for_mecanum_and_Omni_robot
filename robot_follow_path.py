@@ -76,16 +76,16 @@ class PIDcontroller:
     # def __init__(self, start, goal, R_=0.02, L_=0.35,
     #              kP=1.0, kI=0.01, kD=0, kH=5, dt=0.1, v=1.0,
     #              arrive_distance=0.01):
-    def __init__(self, start, goal, R_=0.034, L_=0.23,
+    def __init__(self, start, goal, R_=0.05, Lx=0.13, Ly=0.15,
                  kP=1.0, kI=0.01, kD=0, kH=5, dt=0.1, v=1.0,
                  arrive_distance=0.01):
         self.current = start
         self.goal = goal
-        self.R = R_  # in meter
-        self.L = L_  # in meter
-
-        self.E = 0  # Cummulative error
-        self.old_e = 0  # Previous error
+        self.R = R_  # in meter 
+        self.lx = Lx  # in meter
+        self.ly = Ly
+        self.E = [0, 0]  # Cummulative error
+        self.old_e = [0, 0]  # Previous error
 
         self.Kp = kP
         self.Ki = kI
@@ -111,32 +111,39 @@ class PIDcontroller:
         else:
             goal_theta = self.goal[2]
         # Error between the goal angle and robot angle
+        errorx = dx
+        errory = dy
         alpha = goal_theta - theta_cur
         if abs(alpha) > math.pi:
             if alpha > 0:
                 alpha = -(2*math.pi - alpha)
             else:
                 alpha = 2*math.pi + alpha
-        e = (dx ** 2 + dy ** 2)**0.5
-        # e = alpha
-        e_P = e
-        e_I = self.E + e
-        e_D = e - self.old_e
+        
+        e_Px = errorx
+        e_Ix= self.E[0] + errorx
+        e_Dx = errorx - self.old_e[0]
 
+        e_Py = errory
+        e_Iy = self.E[1] + errory
+        e_Dy = errory - self.old_e[1]
         # this PID is obtained PID controller for the linear velocity and P controller for the angular velocity
-        v = self.Kp * e_P + self.Ki * e_I + self.Kd * e_D
-        # v = 0.1
-        w = self.kh * alpha
+        vx = self.Kp * e_Px + self.Ki * e_Ix + self.Kd * e_Dx
+        vy = self.Kp * e_Py + self.Ki * e_Iy + self.Kd * e_Dy
+        wz = self.kh * alpha
+        # inverse kinematics equation
+        w1 = vx - vy -(self.lx +self.ly)*wz
+        w2 = vx + vy +(self.lx+self.ly)*wz
+        w3 = vx + vy -(self.lx+self.ly)*wz
+        w4 = vx - vy +(self.lx+self.ly)*wz
 
-        vr = v + self.L/2 * w
-        vl = v - self.L/2 * w
-        wr = vr / self.R
-        wl = vl / self.R
-        print(f"Vận tốc của robot: {v} Bánh trái: {vl} Bánh phải: {vr}")
-        self.E = self.E + e
-        self.old_e = e
+        print(f"Vx = {vx} Vy = {vy} Wz = {wz}")
+        self.E[0] = self.E[0] + errorx
+        self.old_e[0] = errorx
 
-        return wr, wl
+        self.E[1] = self.E[1] + errory
+        self.old_e[1] = errory
+        return w1, w2, w3, w4
 
     def isArrived(self, dstar=0.3):
         x_goal, y_goal = self.goal

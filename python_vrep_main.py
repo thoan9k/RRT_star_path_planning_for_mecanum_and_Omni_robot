@@ -18,28 +18,32 @@ else:
     sys.exit("Không thể kết nối")
 
 # Main Objects
-errorcode, robot_position_handle = sim.simxGetObjectHandle(clientID, 'diff_drive_robot', sim.simx_opmode_blocking)
-_, left_motor_handle = sim.simxGetObjectHandle(clientID, 'leftMotor', sim.simx_opmode_blocking)
-_, right_motor_handle = sim.simxGetObjectHandle(clientID, 'rightMotor', sim.simx_opmode_blocking)
+errorcode, robot_position_handle = sim.simxGetObjectHandle(clientID, 'mecanum_robot', sim.simx_opmode_blocking)
+_, wheel1_handle = sim.simxGetObjectHandle(clientID, 'wheel1', sim.simx_opmode_blocking)
+_, wheel3_handle = sim.simxGetObjectHandle(clientID, 'wheel3', sim.simx_opmode_blocking)
+_, wheel4_handle = sim.simxGetObjectHandle(clientID, 'wheel4', sim.simx_opmode_blocking)
+_, wheel2_handle = sim.simxGetObjectHandle(clientID, 'wheel2', sim.simx_opmode_blocking)
+
 _, obstacles_handle = sim.simxGetObjectHandle(clientID, 'obstacles', sim.simx_opmode_blocking)
 _, goal_handle = sim.simxGetObjectHandle(clientID, 'Goal', sim.simx_opmode_blocking)
 
 #  =============================== control motor =================================================
 
 
-def set_velocities(v_left, v_right):
+def set_velocities(w1, w2, w3, w4):
     # if errorcode == sim.simx_return_ok:
     #     print("Lấy được handle của rightMotor")
     # else:
     #     print("Lỗi khi lấy handle của rightMotor:", errorcode)
-    # Đặt vận tốc cho động cơ bên trái
-    sim.simxSetJointTargetVelocity(clientID, left_motor_handle, v_left, sim.simx_opmode_oneshot_wait)
-    # Đặt vận tốc cho động cơ bên phải
-    sim.simxSetJointTargetVelocity(clientID, right_motor_handle, v_right, sim.simx_opmode_oneshot_wait)
+    
+    # Đặt vận tốc cho 4  bánh mecanum
+    sim.simxSetJointTargetVelocity(clientID, wheel1_handle, w1, sim.simx_opmode_oneshot_wait)
+    sim.simxSetJointTargetVelocity(clientID, wheel2_handle, w2, sim.simx_opmode_oneshot_wait)
+    sim.simxSetJointTargetVelocity(clientID, wheel3_handle, w3, sim.simx_opmode_oneshot_wait)
+    sim.simxSetJointTargetVelocity(clientID, wheel4_handle, w4, sim.simx_opmode_oneshot_wait)
 
 
 def get_position(Object=robot_position_handle, index=2):
-    # ====================== nhận và đặt vị trí=====================
     _, position = sim.simxGetObjectPosition(clientID, Object, -1, sim.simx_opmode_blocking)
     # print(f'Vị trí hiện tại:{position} ')
     # # ========= Nhận và đặt hướng quay(chiều ngược chiều kim đồng hồ)=============================
@@ -299,7 +303,7 @@ obsdim = map_value((0.3 - 2.5, 0), flag='Vrep2Py')[0]
 obsnum = 21  # Số vật cản trong môi trường
 iteration_max = 200  # số node tạo ngẫu nhiên để tìm đường tối ưu
 # set_position((-2, -2, 0.5), 0)
-set_velocities(v_left=0, v_right=0)  # Thiết lập tốc độ ban đầu cho diff mobile car
+set_velocities(0, 0, 0, 0)  # Thiết lập tốc độ ban đầu cho diff mobile car
 
 # Lấy toạ độ và hướng của điểm bắt đầu và điểm kết thúc
 init_start = get_position(robot_position_handle)
@@ -360,7 +364,7 @@ create_circle((init_start[1], init_start[0], 0), 0.2, 10, color=(1, 1, 0))
 # Đánh dấu điểm kết thúc
 create_circle((x_goal, y_goal, 0), 0.2, 10, color=(1, 1, 0))
 path = []
-# chuyển đổi hệ toạ độ sang Vrep
+# chuyển chuối toạ độ sang Vrep
 for point in graph_.waypoints2path(6):
     path.append(map_value(point, flag="Py2Vrep"))
 print(path)
@@ -370,15 +374,15 @@ e = 0
 x_c, y_c, theta = get_position()
 x_d = 0
 y_d = 0
-d_star = 0.01
+
 # Ban đầu xoay về phía điểm mong muốn trước bằng P controller
 while True:
     x_c, y_c, theta_c = get_position()
     theta_d = math.atan2((path[i][0] - y_c), path[i][1] - x_c)
     controller = robot_follow_path.PIDcontroller(get_position(), (x_c, y_c, theta_d), kP=0, kI=0,
-                                                 kD=0, kH=0.8, arrive_distance=d_star)
-    wr, wl = controller.PIDcalculate()
-    set_velocities(v_left=wl, v_right=wr)
+                                                 kD=0, kH=1)
+    w1, w2, w3, w4 = controller.PIDcalculate()
+    set_velocities(w1, w2, w3, w4)
     if abs(theta_c - theta_d) <= math.pi / 4:
         break
 
@@ -392,11 +396,11 @@ while True:
     goal_theta = math.atan2(y_c - y_d, x_c - x_d)
 
     # Robot_follow_path.PIDcontroller(current, goal=desired,kP=0.12, kI=0.03, kD=0, kH=0.6, arrive_distance=d_star)
-    controller = robot_follow_path.PIDcontroller(current, goal=desired, kP=1.4, kI=0.1, kD=0, kH=1.7,
-                                                 arrive_distance=d_star)
+    controller = robot_follow_path.PIDcontroller(current, goal=desired, kP=1.4, kI=0.1, kD=0, kH=1.7)
+                                                
 
-    wr, wl = controller.PIDcalculate()
-    set_velocities(v_left=wl, v_right=wr)
+    w1, w2, w3, w4 = controller.PIDcalculate()
+    set_velocities(w1, w2, w3, w4)
     # Create trail
     create_point((x_c, y_c), (0, 1, 1))
     if controller.isArrived(0.25):
@@ -405,17 +409,17 @@ while True:
     if i <= 0:
         i = 0
         time.sleep(0.7)
-        set_velocities(v_left=0, v_right=0)
+        set_velocities(0, 0, 0, 0)
         time.sleep(1)
         while True:
             _, _, theta_c = get_position()
             controller = robot_follow_path.PIDcontroller((finish_goal[0], finish_goal[1], theta_c), finish_goal, kP=0,
-                                                         kI=0, kD=0, kH=1, arrive_distance=d_star)
-            wr, wl = controller.PIDcalculate()
-            set_velocities(v_left=wl, v_right=wr)
+                                                         kI=0, kD=0, kH=1)
+            w1, w2, w3, w4 = controller.PIDcalculate()
+            set_velocities(w1, w2, w3, w4)
             if abs(theta_c - finish_goal[2]) <= math.pi / 36:
                 break
-        set_velocities(v_left=0, v_right=0)
+        set_velocities(0, 0, 0, 0)
         break
 sim.simxFinish(clientID)
 sim.simxStopSimulation(clientID, sim.simx_opmode_blocking)
