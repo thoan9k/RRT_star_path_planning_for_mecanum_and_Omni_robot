@@ -379,7 +379,7 @@ while True:
                                                  kD=0, kH=0.8, arrive_distance=d_star)
     wr, wl = controller.PIDcalculate()
     set_velocities(v_left=wl, v_right=wr)
-    if abs(theta_c - theta_d) <= math.pi / 6:
+    if abs(theta_c - theta_d) <= math.pi / 4:
         break
 
 # Theo path được chỉ định bằng PID
@@ -392,7 +392,7 @@ while True:
     goal_theta = math.atan2(y_c - y_d, x_c - x_d)
 
     # Robot_follow_path.PIDcontroller(current, goal=desired,kP=0.12, kI=0.03, kD=0, kH=0.6, arrive_distance=d_star)
-    controller = robot_follow_path.PIDcontroller(current, goal=desired, kP=1.2, kI=0.02, kD=0, kH=0.9,
+    controller = robot_follow_path.PIDcontroller(current, goal=desired, kP=1.4, kI=0.1, kD=0, kH=1.7,
                                                  arrive_distance=d_star)
 
     wr, wl = controller.PIDcalculate()
@@ -404,7 +404,7 @@ while True:
     # Xoay về hướng đích mong muốn P controller
     if i <= 0:
         i = 0
-        time.sleep(0.4)
+        time.sleep(0.7)
         set_velocities(v_left=0, v_right=0)
         time.sleep(1)
         while True:
