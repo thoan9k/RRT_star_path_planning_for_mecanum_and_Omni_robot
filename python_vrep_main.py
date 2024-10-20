@@ -19,10 +19,10 @@ else:
 
 # Main Objects
 errorcode, robot_position_handle = sim.simxGetObjectHandle(clientID, 'mecanum_robot', sim.simx_opmode_blocking)
-_, wheel1_handle = sim.simxGetObjectHandle(clientID, 'wheel1', sim.simx_opmode_blocking)
-_, wheel3_handle = sim.simxGetObjectHandle(clientID, 'wheel3', sim.simx_opmode_blocking)
-_, wheel4_handle = sim.simxGetObjectHandle(clientID, 'wheel4', sim.simx_opmode_blocking)
-_, wheel2_handle = sim.simxGetObjectHandle(clientID, 'wheel2', sim.simx_opmode_blocking)
+_, wheel1_handle = sim.simxGetObjectHandle(clientID, '/mecanum_robot/wheel1', sim.simx_opmode_blocking)
+_, wheel3_handle = sim.simxGetObjectHandle(clientID, '/mecanum_robot/wheel3', sim.simx_opmode_blocking)
+_, wheel4_handle = sim.simxGetObjectHandle(clientID, '/mecanum_robot/wheel4', sim.simx_opmode_blocking)
+_, wheel2_handle = sim.simxGetObjectHandle(clientID, '/mecanum_robot/wheel2', sim.simx_opmode_blocking)
 
 _, obstacles_handle = sim.simxGetObjectHandle(clientID, 'obstacles', sim.simx_opmode_blocking)
 _, goal_handle = sim.simxGetObjectHandle(clientID, 'Goal', sim.simx_opmode_blocking)
@@ -318,7 +318,7 @@ create_circle((x_goal, y_goal, 0), 0.3, 10)
 # Vrep coordinate can be switched x-axis into y-axis and inverse too
 goal = map_value((x_goal, y_goal), flag='Vrep2Py')
 print(f"Vị trí đích Goal:{[goal[0], goal[1], finsish_theta_goal * 360 / (2 * math.pi)]}")
-
+# set_velocities(-2, 2, -2, 2)
 obs = []
 rect = None
 for obstacle in get_obstacles_positions():
@@ -328,7 +328,7 @@ for obstacle in get_obstacles_positions():
     rect = pygame.Rect(obstacle, (obsdim, obsdim))
     obs.append(rect)
 
-print(obs)
+#print(obs)
 result = False
 pygame.init()
 
@@ -337,8 +337,8 @@ graph_ = base.RRTgraph(start, goal, dimensions, obsdim, obsnum)
 graph_.obstacles = obs.copy()
 
 map_.drawmap(obs)
-graph_.obstacles = graph_.getTrueObs(obs, 30)
-obs = graph_.getTrueObs(obs, 30)
+graph_.obstacles = graph_.getTrueObs(obs,60)
+obs = graph_.getTrueObs(obs, 60)
 pygame.display.update()
 time.sleep(3)
 i_ = 0
@@ -360,51 +360,81 @@ while not result:
         print("final cost is " + str(graph_.getfinalcost()))
         break
 
+#========================Draw nurse curve========================================
+# Tạo một đường cong B-Spline
+from geomdl import BSpline
+from geomdl import utilities
+curve = BSpline.Curve()
+# Bậc của đường cong 
+curve.degree = 3
+# Thiết lập các điểm điều khiển
+curve.ctrlpts = graph_.getPathcoords()
+# Tạo vector nút (knot vector) dựa trên số lượng điểm điều khiển và bậc của đường cong
+curve.knotvector = utilities.generate_knot_vector(curve.degree, len(curve.ctrlpts))
+# Số lượng điểm cần vẽ trên đường cong
+curve.sample_size = 60
+# Tính toán các điểm trên đường NURBS
+curve.evaluate()
+# Vẽ đường NURBS
+# x_val, y_val = zip(*curve.evalpts)
+nurbs = curve.evalpts
+for i in range(0, len(nurbs)-1):
+    pygame.draw.line(map_.map,map_.green, nurbs[i], nurbs[i+1],map_.edgeThickness+3)
+    pygame.display.update()
+    pos1 = map_value(nurbs[i], flag="Py2Vrep")
+    pos2 = map_value(nurbs[i+1], flag="Py2Vrep")
+    create_line(pos1, pos2, (0, 0, 1))
+    
+
+
 create_circle((init_start[1], init_start[0], 0), 0.2, 10, color=(1, 1, 0))
 # Đánh dấu điểm kết thúc
 create_circle((x_goal, y_goal, 0), 0.2, 10, color=(1, 1, 0))
 path = []
 # chuyển chuối toạ độ sang Vrep
-for point in graph_.waypoints2path(6):
+for point in nurbs:
     path.append(map_value(point, flag="Py2Vrep"))
-print(path)
+# print(path)
 
 i = len(path) - 1
 e = 0
 x_c, y_c, theta = get_position()
 x_d = 0
 y_d = 0
-
+# 
 # Ban đầu xoay về phía điểm mong muốn trước bằng P controller
 while True:
     x_c, y_c, theta_c = get_position()
     theta_d = math.atan2((path[i][0] - y_c), path[i][1] - x_c)
     controller = robot_follow_path.PIDcontroller(get_position(), (x_c, y_c, theta_d), kP=0, kI=0,
-                                                 kD=0, kH=1)
-    w1, w2, w3, w4 = controller.PIDcalculate()
-    set_velocities(w1, w2, w3, w4)
-    if abs(theta_c - theta_d) <= math.pi / 4:
-        break
-
-# Theo path được chỉ định bằng PID
+                                                 kD=0, kH=2)
+    while not abs(theta_c - theta_d) <= math.pi / 9:
+        
+        controller.current = get_position()
+        theta_c = controller.current[2]
+        #print(f"thetac ={theta_c} Thetad = {theta_d}")
+        w1, w2, w3, w4 = controller.PIDcalculate()
+        set_velocities(-w1, -w2, -w3, -w4)
+    break
+# 
+# Theo path được chỉ định bằng PID controller
 while True:
     x_c, y_c, theta = get_position()
     y_d, x_d = path[i - 1]
-
+# 
     current = (x_c, y_c, theta)
     desired = (x_d, y_d)
-    goal_theta = math.atan2(y_c - y_d, x_c - x_d)
-
+# 
     # Robot_follow_path.PIDcontroller(current, goal=desired,kP=0.12, kI=0.03, kD=0, kH=0.6, arrive_distance=d_star)
-    controller = robot_follow_path.PIDcontroller(current, goal=desired, kP=1.4, kI=0.1, kD=0, kH=1.7)
+    controller = robot_follow_path.PIDcontroller(current, goal=desired, kP=0.8, kI=0.01, kD=0, kH=1)
                                                 
-
-    w1, w2, w3, w4 = controller.PIDcalculate()
-    set_velocities(w1, w2, w3, w4)
     # Create trail
     create_point((x_c, y_c), (0, 1, 1))
-    if controller.isArrived(0.25):
-        i -= 1
+    while not controller.isArrived(0.3):
+        controller.current = get_position()    
+        w1, w2, w3, w4 = controller.PIDcalculate()
+        set_velocities(-w1, -w2, -w3, -w4)  
+    i -= 1
     # Xoay về hướng đích mong muốn P controller
     if i <= 0:
         i = 0
@@ -416,7 +446,7 @@ while True:
             controller = robot_follow_path.PIDcontroller((finish_goal[0], finish_goal[1], theta_c), finish_goal, kP=0,
                                                          kI=0, kD=0, kH=1)
             w1, w2, w3, w4 = controller.PIDcalculate()
-            set_velocities(w1, w2, w3, w4)
+            set_velocities(-w1, -w2, -w3, -w4)
             if abs(theta_c - finish_goal[2]) <= math.pi / 36:
                 break
         set_velocities(0, 0, 0, 0)

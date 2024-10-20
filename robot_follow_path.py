@@ -76,12 +76,12 @@ class PIDcontroller:
     # def __init__(self, start, goal, R_=0.02, L_=0.35,
     #              kP=1.0, kI=0.01, kD=0, kH=5, dt=0.1, v=1.0,
     #              arrive_distance=0.01):
-    def __init__(self, start, goal, R_=0.05, Lx=0.13, Ly=0.15,
+    def __init__(self, start, goal, R=0.05, Lx=0.15, Ly=0.15,
                  kP=1.0, kI=0.01, kD=0, kH=5, dt=0.1, v=1.0,
                  arrive_distance=0.01):
         self.current = start
         self.goal = goal
-        self.R = R_  # in meter 
+        self.R = R # in meter 
         self.lx = Lx  # in meter
         self.ly = Ly
         self.E = [0, 0]  # Cummulative error
@@ -110,39 +110,45 @@ class PIDcontroller:
             goal_theta = math.atan2(dy, dx)
         else:
             goal_theta = self.goal[2]
-        # Error between the goal angle and robot angle
+        # Error between the goal and current position of robot
         errorx = dx
         errory = dy
         alpha = goal_theta - theta_cur
+        
+        errorxR = math.cos(theta_cur)*errorx +math.sin(theta_cur)*errory
+        erroryR = -math.sin(theta_cur)*errorx +math.cos(theta_cur)*errory
+
+        
         if abs(alpha) > math.pi:
             if alpha > 0:
                 alpha = -(2*math.pi - alpha)
             else:
                 alpha = 2*math.pi + alpha
-        
-        e_Px = errorx
-        e_Ix= self.E[0] + errorx
-        e_Dx = errorx - self.old_e[0]
+        print(f"alpha = {alpha}")
+        e_Px = errorxR
+        e_Ix= self.E[0] + errorxR
+        e_Dx = errorxR - self.old_e[0]
 
-        e_Py = errory
-        e_Iy = self.E[1] + errory
-        e_Dy = errory - self.old_e[1]
+        e_Py = erroryR
+        e_Iy = self.E[1] + erroryR
+        e_Dy = erroryR - self.old_e[1]
         # this PID is obtained PID controller for the linear velocity and P controller for the angular velocity
         vx = self.Kp * e_Px + self.Ki * e_Ix + self.Kd * e_Dx
         vy = self.Kp * e_Py + self.Ki * e_Iy + self.Kd * e_Dy
         wz = self.kh * alpha
-        # inverse kinematics equation
-        w1 = vx - vy -(self.lx +self.ly)*wz
-        w2 = vx + vy +(self.lx+self.ly)*wz
-        w3 = vx + vy -(self.lx+self.ly)*wz
-        w4 = vx - vy +(self.lx+self.ly)*wz
+        # inverse kinematic equation
+        w1 = (vx - vy -(self.lx +self.ly)*wz)/self.R
+        w2 = (vx + vy +(self.lx+self.ly)*wz)/self.R
+        w3 = (vx + vy -(self.lx+self.ly)*wz)/self.R
+        w4 = (vx - vy +(self.lx+self.ly)*wz)/self.R
+        v = (vx**2 + vy**2)**0.5
+        print(f"V={v} Wz= {wz}")
+        self.E[0] = self.E[0] + errorxR
+        self.old_e[0] = errorxR
 
-        print(f"Vx = {vx} Vy = {vy} Wz = {wz}")
-        self.E[0] = self.E[0] + errorx
-        self.old_e[0] = errorx
-
-        self.E[1] = self.E[1] + errory
-        self.old_e[1] = errory
+        self.E[1] = self.E[1] + erroryR
+        self.old_e[1] = erroryR
+        
         return w1, w2, w3, w4
 
     def isArrived(self, dstar=0.3):
