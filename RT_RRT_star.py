@@ -96,6 +96,7 @@ class RT_RRT_star:
         self.parent = []
         self.child  = []
         self.cost = []
+        self.blocked_nodes = []
         # initialize the tree
         (x, y) = agent
         self.x.append(x)
@@ -208,14 +209,16 @@ class RT_RRT_star:
     def FindNodesNear(self, Xrand):  # Xrand là 1 node đã được lấy mẫu ngẫu nhiên hoặc là toạ độ 
         is_int = isinstance(Xrand, (int, float))
         XSI = self.get_XSI(Xrand)
-        # neighbors = []
-        # for node in XSI:
-        #     if is_int:
-        #         if self.distance(node, Xrand)<self.d:
-        #             neighbors.append(node)
-        #     else:
-        #         if math.dist((self.x[node], self.y[node]), Xrand)<self.d:
-        #             neighbors.append(node)
+        neighbors = []
+        for node in XSI:
+            if is_int:
+                if self.distance(node, Xrand)<self.d:
+                    neighbors.append(node)
+            else:
+                neighbors = XSI
+                break
+            #     if math.dist((self.x[node], self.y[node]), Xrand)<self.d:
+            #         neighbors.append(node)
         if is_int:
             
             for i in range(len(XSI)):
@@ -312,14 +315,14 @@ class RT_RRT_star:
         if isinstance(n_current, int): # nếu n_current là 1 node bất kỳ
             c = 0
             while n_current != self.root:
-                # if n_current in blocknodes:
-                #     return float('inf')
+                if n_current in self.blocked_nodes:
+                    return float('inf')
                 c += self.distance(n_current, self.parent[n_current])
                 n_current = self.parent[n_current]
         elif isinstance(n_current, (list, tuple)): # nếu n_current là danh sách các toạ độ 
             for i in range(len(n_current)-1):
                 c += math.dist(n_current[i], n_current[i+1])    
-        
+                #print("toạ độ")
         return c
 
 
@@ -546,19 +549,20 @@ class RT_RRT_star:
         if not Obst:
             return []
         # nếu có vật cản
-        blocked_nodes = []
+        self.blocked_nodes = []
         for ob in Obst:
-            xnear = self.FindNodesNear(ob)
+            xnear = self.FindNodesNear((ob[1], ob[0]))
+            print(f'toạ độ ob: {ob}')
             for node in xnear:
                 #pygame.draw.circle(self.surface, (255, 0, 0), (self.x[node], self.y[node]), 2, 0)
-                if math.dist((self.x[node], self.y[node]), ob) <= self.rb:
-                    blocked_nodes.append(node)
-                    pygame.draw.circle(self.surface, (255, 0, 0), (self.x[node], self.y[node]), 3, 0)
+                if math.dist((self.x[node], self.y[node]), (ob[1], ob[0])) <= self.rb:
+                    self.blocked_nodes.append(node)
+                    pygame.draw.circle(self.surface, (0, 255, 255), (self.x[node], self.y[node]), 3, 0)
                     pygame.display.update()
                     
         # if Obst:
             # print(f'Các node bị block:{blocked_nodes}')
-        return blocked_nodes
+        return self.blocked_nodes
     
     def update_path(self):
         # self.update_blocked_nodes()
@@ -572,9 +576,9 @@ class RT_RRT_star:
             self.add_edge(nodes_in_goalarea[0],self.goalstate)
             self.old_goal = self.goal
         
-        if len(nodes_in_goalarea)>1:
+        if len(nodes_in_goalarea)>=1:
             cmin = float('inf')
-            best_node = None
+            best_node = nodes_in_goalarea[0]
             for node in nodes_in_goalarea:
                 """ NHỚ BỎ QUA NODE GOAL """
                 if node == self.goalstate :
@@ -619,6 +623,7 @@ class RT_RRT_star:
             self.Rewire_Tree_root()  # RewireFromRoot(Qs T )
     
     def Update_tree(self):
+        self.update_blocked_nodes()
         #self.get_dynamic_obs_inside()
         #self.surface.fill((255, 255, 255))
          # Sao chép lưới để duyệt và vẽ
@@ -722,7 +727,7 @@ class RT_RRT_star:
         Obst = self.dynamic_obstacles
         temp = []
         for ob in Obst:
-            if math.dist(self.agent, ob) < self.ro:
+            if math.dist(self.agent, (ob[1], ob[0])) < self.ro:
                 temp.append(ob)
         Obst = temp
         # if Obst: # and Flag=='Update':
@@ -852,7 +857,7 @@ if __name__ == '__main__':
         rt_rrt_star.Update_tree() # Update xgoal, xa, Xfree and Xobs
         start_time = time.time() 
         ellapsed_time = 0
-        while ellapsed_time<0.2:
+        while ellapsed_time<0.1:
             rt_rrt_star.Expansion_and_Rewiring()
             end_time = time.time()
             ellapsed_time = end_time - start_time
@@ -888,16 +893,8 @@ if __name__ == '__main__':
             rt_rrt_star.parent[rt_rrt_star.root] = path_nodes[1] # cập nhập parent của gốc cũ là gốc mới
             rt_rrt_star.root = path_nodes[1] # cập nhập gốc mới
             rt_rrt_star.parent[rt_rrt_star.root] = path_nodes[1] # cập nhập parent của gốc mới là gốc mới
-            #tree_root = rt_rrt_star.x[rt_rrt_star.root], rt_rrt_star.y[rt_rrt_star.root]
-            # if path_nodes[2] == rt_rrt_star.goalstate:
-            #     rt_rrt_star.parent[rt_rrt_star.root] = path_nodes[2]
-            #     rt_rrt_star.root = path_nodes[2]
-            #     rt_rrt_star.parent[rt_rrt_star.root] = path_nodes[2]
-            #pygame.draw.circle(rt_rrt_star.surface, (0,255,0),tree_root, 5, 0)
-            
-            #print("2")
         #Move the agent toward x0 for a limited time  
         time_move = time.time()
         while time.time()-time_move < 0.01:
-            rt_rrt_star.Move(rt_rrt_star.root,2)
+            rt_rrt_star.Move(rt_rrt_star.root,1.5)
             # print("moving...")
